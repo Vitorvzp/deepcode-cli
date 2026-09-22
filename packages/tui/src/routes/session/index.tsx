@@ -258,13 +258,6 @@ export function Session() {
   const [sidebar, setSidebar] = kv.signal<"auto" | "hide">("sidebar", "auto")
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
-  // Session-scoped (not kv-persisted): forcing reasoning/native-search on for
-  // one conversation shouldn't leak into the next one, so these reset to
-  // false whenever route.sessionID changes (see the reset effect below),
-  // mirroring the same requirement already enforced for the headless `run`
-  // command's --reasoning/--searching flags.
-  const [reasoningEnabled, setReasoningEnabled] = createSignal(false)
-  const [searchEnabled, setSearchEnabled] = createSignal(false)
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
   const showThinking = createMemo(() => true)
@@ -714,63 +707,6 @@ export function Session() {
       },
     },
     {
-      title: (() => {
-        const next = nextThinkingMode(thinkingMode())
-        if (next === "hide") return "Collapse thinking"
-        return "Expand thinking"
-      })(),
-      value: "session.toggle.thinking",
-      category: "Session",
-      slash: {
-        name: "thinking",
-        aliases: ["toggle-thinking"],
-      },
-      run: () => {
-        thinking.set(nextThinkingMode(thinkingMode()))
-        dialog.clear()
-      },
-    },
-    {
-      title: reasoningEnabled() ? "Disable forced reasoning" : "Force reasoning for this session",
-      value: "session.toggle.reasoning",
-      category: "Session",
-      slash: {
-        name: "reasoning",
-        aliases: ["toggle-reasoning"],
-      },
-      run: () => {
-        setReasoningEnabled((prev) => !prev)
-        toast.show({
-          title: reasoningEnabled() ? "Reasoning ativado" : "Reasoning desativado",
-          message: reasoningEnabled()
-            ? "Este turno vai forcar thinking_enabled=true no provider."
-            : "Voltando ao comportamento padrao do modelo.",
-          variant: "info",
-        })
-        dialog.clear()
-      },
-    },
-    {
-      title: searchEnabled() ? "Disable native search" : "Enable native search for this session",
-      value: "session.toggle.searching",
-      category: "Session",
-      slash: {
-        name: "searching",
-        aliases: ["toggle-searching"],
-      },
-      run: () => {
-        setSearchEnabled((prev) => !prev)
-        toast.show({
-          title: searchEnabled() ? "Searching ativado" : "Searching desativado",
-          message: searchEnabled()
-            ? "Este turno vai forcar search_enabled=true no provider."
-            : "Voltando ao comportamento padrao do modelo.",
-          variant: "info",
-        })
-        dialog.clear()
-      },
-    },
-    {
       title: showDetails() ? "Hide tool details" : "Show tool details",
       value: "session.toggle.actions",
       category: "Session",
@@ -1202,16 +1138,6 @@ export function Session() {
 
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
-  createEffect(
-    on(
-      () => route.sessionID,
-      () => {
-        setReasoningEnabled(false)
-        setSearchEnabled(false)
-      },
-      { defer: true },
-    ),
-  )
 
   return (
     <LocationProvider location={location()}>
@@ -1386,8 +1312,8 @@ export function Session() {
                         toBottom()
                       }}
                       sessionID={route.sessionID}
-                      thinkingEnabled={reasoningEnabled}
-                      searchEnabled={searchEnabled}
+                      thinkingEnabled={() => local.reasoning.enabled}
+                      searchEnabled={() => local.search.enabled}
                       right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
                     />
                   </pluginRuntime.Slot>

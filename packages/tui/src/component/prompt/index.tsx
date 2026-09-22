@@ -57,6 +57,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { linkBridgeSession, importAndLinkDeepSeekSession } from "../../util/session-link"
 
 registerOpencodeSpinner()
 
@@ -1058,6 +1059,77 @@ export function Prompt(props: PromptProps) {
           ]
         : []
 
+    const firstWord = inputText.trim().split(/\s+/)[0]
+    if (firstWord.startsWith("/")) {
+      const slash = firstWord.slice(1).toLowerCase()
+      if (slash === "session" || slash === "link-session") {
+        const restOfInput = inputText.trim().slice(firstWord.length).trim()
+        input.clear()
+        input.extmarks.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+
+        if (restOfInput) {
+          toast.show({
+            title: "Importando conversa...",
+            message: `Buscando histórico do DeepSeek: ${restOfInput}`,
+            variant: "info",
+            duration: 4000,
+          })
+
+          void importAndLinkDeepSeekSession({
+            url: restOfInput,
+            sdk,
+          })
+            .then(async (res) => {
+              await sync.session.refresh()
+              route.navigate({ type: "session", sessionID: res.sessionId })
+              toast.show({
+                title: "Conversa importada e vinculada!",
+                message: `"${res.title}" (${res.messageCount} mensagens) importada com sucesso.`,
+                variant: "success",
+                duration: 5000,
+              })
+            })
+            .catch((err) => {
+              toast.show({
+                title: "Falha ao importar sessão",
+                message: err instanceof Error ? err.message : String(err),
+                variant: "error",
+                duration: 6000,
+              })
+            })
+          return true
+        }
+
+        void keymap.dispatchCommand("session.link")
+        return true
+      }
+
+      const matchingEntry = keymap
+        .getCommandEntries({ visibility: "reachable", namespace: "palette" })
+        .find((entry) => {
+          const name =
+            "slashName" in entry.command && typeof entry.command.slashName === "string"
+              ? entry.command.slashName.toLowerCase()
+              : undefined
+          const aliases =
+            "slashAliases" in entry.command && Array.isArray(entry.command.slashAliases)
+              ? (entry.command.slashAliases as string[])
+              : undefined
+          return name === slash || aliases?.some((a) => typeof a === "string" && a.toLowerCase() === slash)
+        })
+
+      if (matchingEntry) {
+        input.clear()
+        input.extmarks.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+        void keymap.dispatchCommand(matchingEntry.command.name)
+        return true
+      }
+    }
+
     if (store.mode === "shell") {
       move.startSubmit()
       void sdk.client.session.shell({
@@ -1101,8 +1173,8 @@ export function Prompt(props: PromptProps) {
             agent: agent.name,
             model: selectedModel,
             variant,
-            thinkingEnabled: props.thinkingEnabled?.(),
-            searchEnabled: props.searchEnabled?.(),
+            thinkingEnabled: props.thinkingEnabled ? props.thinkingEnabled() : local.reasoning.enabled,
+            searchEnabled: props.searchEnabled ? props.searchEnabled() : local.search.enabled,
             parts: [
               ...editorParts,
               {

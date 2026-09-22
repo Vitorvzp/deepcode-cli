@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, on } from "solid-js"
 import { useSync } from "./sync"
 import { useEvent } from "./event"
 import path from "path"
@@ -530,12 +530,44 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
     })
 
+    const [reasoningEnabled, setReasoningEnabled] = createSignal(false)
+    const [searchEnabled, setSearchEnabled] = createSignal(false)
+
+    createEffect(
+      on(
+        () => (route.data.type === "session" ? route.data.sessionID : undefined),
+        () => {
+          setReasoningEnabled(false)
+          setSearchEnabled(false)
+        },
+        { defer: true },
+      ),
+    )
+
+    const reasoning = {
+      get enabled() {
+        return reasoningEnabled()
+      },
+      set: setReasoningEnabled,
+      toggle: () => setReasoningEnabled((prev) => !prev),
+    }
+
+    const search = {
+      get enabled() {
+        return searchEnabled()
+      },
+      set: setSearchEnabled,
+      toggle: () => setSearchEnabled((prev) => !prev),
+    }
+
     const result = {
       model,
       agent,
       mcp,
       session,
       permission,
+      reasoning,
+      search,
     }
     return result
   },

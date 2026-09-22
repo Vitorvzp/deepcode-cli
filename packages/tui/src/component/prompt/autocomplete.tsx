@@ -1,15 +1,7 @@
 import type { BoxRenderable, TextareaRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { pathToFileURL } from "bun"
-import { appendFileSync } from "node:fs"
 import fuzzysort from "fuzzysort"
 import path from "path"
-
-const DEBUG_LOG = "C:\\Users\\vitor\\AppData\\Local\\Temp\\deepcode_slash_debug.log"
-function debugLog(line: string) {
-  try {
-    appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${line}\n`)
-  } catch {}
-}
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -453,7 +445,25 @@ export function Autocomplete(props: {
   )
 
   const commands = createMemo((): AutocompleteOption[] => {
-    const results: AutocompleteOption[] = [...slashes()]
+    const results: AutocompleteOption[] = slashes().map((entry) => {
+      const isSession = entry.display.trim() === "/session" || (entry as { value?: string }).value === "/session"
+      if (isSession) {
+        return {
+          ...entry,
+          display: "/session <url>",
+          value: "/session",
+          description: entry.description ?? "Link DeepSeek chat URL to bridge",
+          onSelect: () => {
+            const newText = "/session "
+            const cursor = props.input().logicalCursor
+            props.input().deleteRange(0, 0, cursor.row, cursor.col)
+            props.input().insertText(newText)
+            props.input().cursorOffset = Bun.stringWidth(newText)
+          },
+        }
+      }
+      return entry
+    })
 
     for (const serverCommand of sync.data.command) {
       if (serverCommand.source === "skill") continue
@@ -472,10 +482,6 @@ export function Autocomplete(props: {
     }
 
     results.sort((a, b) => a.display.localeCompare(b.display))
-
-    debugLog(
-      `[commands] count=${results.length} hasReasoning=${results.some((r) => r.display.includes("reasoning"))} hasSearching=${results.some((r) => r.display.includes("searching"))} names=${results.map((r) => r.display.trim()).join(",")}`,
-    )
 
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
     if (!max) return results
@@ -503,12 +509,7 @@ export function Autocomplete(props: {
     const nonFileOptions: AutocompleteOption[] =
       store.visible === "@" ? [...referenceAliasesValue, ...agentsValue, ...mcpResources()] : [...commandsValue]
 
-    debugLog(
-      `[options] visible=${JSON.stringify(store.visible)} search=${JSON.stringify(searchValue)} nonFileCount=${nonFileOptions.length} hasReasoningRaw=${nonFileOptions.some((o) => o.display.includes("reasoning"))}`,
-    )
-
     if (!searchValue) {
-      debugLog(`[options] EARLY-RETURN-empty-search`)
       return [...nonFileOptions, ...fileOptions]
     }
 
@@ -547,10 +548,6 @@ export function Autocomplete(props: {
       })
       .map((arr) => arr.obj)
 
-    debugLog(
-      `[options] fuzzied count=${fuzziedNonFiles.length} names=${fuzziedNonFiles.map((o) => o.display.trim()).join(",")}`,
-    )
-
     return [...fuzziedNonFiles, ...fileOptions].slice(0, 10)
   })
 
@@ -585,6 +582,16 @@ export function Autocomplete(props: {
     if (!selected) return
     hide()
     selected.onSelect?.()
+    if (store.visible === "/" && selected.display.trim().startsWith("/")) {
+      const plain = props.input().plainText
+      if (plain.startsWith("/") && !plain.endsWith(" ")) {
+        props.input().clear()
+        props.setPrompt((draft) => {
+          draft.input = ""
+          draft.parts = []
+        })
+      }
+    }
   }
 
   function expandDirectory() {

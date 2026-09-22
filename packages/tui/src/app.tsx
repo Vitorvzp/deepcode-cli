@@ -58,9 +58,12 @@ import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
+import { DialogPrompt } from "./ui/dialog-prompt"
+import { linkBridgeSession, importAndLinkDeepSeekSession } from "./util/session-link"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
 import { KVProvider, useKV } from "./context/kv"
+import { nextThinkingMode, useThinkingMode } from "./context/thinking"
 import * as Model from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
@@ -372,6 +375,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const renderer = useRenderer()
   const dialog = useDialog()
   const local = useLocal()
+  const thinking = useThinkingMode()
   const kv = useKV()
   const keymap = useOpencodeKeymap()
   const event = useEvent()
@@ -581,6 +585,46 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
+        name: "session.link",
+        title: "Import and link DeepSeek chat URL to bridge",
+        category: "Session",
+        slashName: "session",
+        slashAliases: ["link-session"],
+        run: async () => {
+          const inputUrl = await DialogPrompt.show(dialog, "Importar Sessão DeepSeek", {
+            placeholder: "https://chat.deepseek.com/a/chat/s/... ou session ID",
+          })
+          if (!inputUrl) return
+          toast.show({
+            title: "Importando conversa...",
+            message: `Buscando histórico do DeepSeek: ${inputUrl}`,
+            variant: "info",
+            duration: 4000,
+          })
+          try {
+            const res = await importAndLinkDeepSeekSession({
+              url: inputUrl,
+              sdk,
+            })
+            await sync.session.refresh()
+            route.navigate({ type: "session", sessionID: res.sessionId })
+            toast.show({
+              title: "Conversa importada e vinculada!",
+              message: `"${res.title}" (${res.messageCount} mensagens) importada com sucesso.`,
+              variant: "success",
+              duration: 5000,
+            })
+          } catch (err: any) {
+            toast.show({
+              title: "Erro ao importar sessão",
+              message: err?.message || String(err),
+              variant: "error",
+              duration: 6000,
+            })
+          }
+        },
+      },
+      {
         name: "session.new",
         title: "New session",
         suggested: route.data.type === "session",
@@ -779,6 +823,62 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.replace(() => <DialogDebug />)
         },
         category: "System",
+      },
+      {
+        name: "session.toggle.reasoning",
+        title: local.reasoning.enabled ? "Disable forced reasoning" : "Force reasoning for this session",
+        category: "Session",
+        slashName: "reasoning",
+        slashAliases: ["toggle-reasoning"],
+        run: () => {
+          local.reasoning.toggle()
+          toast.show({
+            title: local.reasoning.enabled ? "Reasoning ativado" : "Reasoning desativado",
+            message: local.reasoning.enabled
+              ? "Este turno vai forcar thinking_enabled=true no provider."
+              : "Voltando ao comportamento padrao do modelo.",
+            variant: "info",
+          })
+          dialog.clear()
+        },
+      },
+      {
+        name: "session.toggle.searching",
+        title: local.search.enabled ? "Disable native search" : "Enable native search for this session",
+        category: "Session",
+        slashName: "searching",
+        slashAliases: ["toggle-searching"],
+        run: () => {
+          local.search.toggle()
+          toast.show({
+            title: local.search.enabled ? "Searching ativado" : "Searching desativado",
+            message: local.search.enabled
+              ? "Este turno vai forcar search_enabled=true no provider."
+              : "Voltando ao comportamento padrao do modelo.",
+            variant: "info",
+          })
+          dialog.clear()
+        },
+      },
+      {
+        name: "session.toggle.thinking",
+        title: nextThinkingMode(thinking.mode()) === "hide" ? "Collapse thinking" : "Expand thinking",
+        category: "Session",
+        slashName: "thinking",
+        slashAliases: ["toggle-thinking"],
+        run: () => {
+          const next = nextThinkingMode(thinking.mode())
+          thinking.set(next)
+          toast.show({
+            title: next === "hide" ? "Thinking colapsado" : "Thinking expandido",
+            message:
+              next === "hide"
+                ? "Blocos de thinking serao recolhidos na visualizacao."
+                : "Blocos de thinking serao expandidos na visualizacao.",
+            variant: "info",
+          })
+          dialog.clear()
+        },
       },
       {
         name: "theme.switch",

@@ -115,6 +115,8 @@ import { corsVaryFix } from "./middleware/cors-vary"
 import { errorLayer } from "./middleware/error"
 import { fenceLayer } from "./middleware/fence"
 import { schemaErrorLayer } from "./middleware/schema-error"
+import { MessageID, PartID, SessionID } from "@/session/schema"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -190,6 +192,134 @@ const docResponse = lazy(() => HttpServerResponse.jsonUnsafe(OpenApi.fromApi(Pub
 const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effect.succeed(docResponse()))).pipe(
   Layer.provide(authOnlyRouterLayer),
 )
+
+const sessionImportRoute = HttpRouter.use((router) =>
+  Effect.gen(function* () {
+    const sessionSvc = yield* Session.Service
+
+    yield* router.add("POST", "/session/import", (request) =>
+      Effect.gen(function* () {
+        const text = yield* Effect.orDie(request.text)
+        const body = JSON.parse(text) as {
+          sessionID?: string
+          title?: string
+          messages?: Array<{
+            role: "user" | "assistant"
+            text?: string
+            reasoning?: string
+            time?: number
+            model?: string
+          }>
+        }
+
+        let targetSessionID: SessionID
+        let targetSessionTitle = body.title || "DeepSeek Conversation"
+
+        if (body.sessionID) {
+          targetSessionID = body.sessionID as SessionID
+        } else {
+          const created = yield* sessionSvc.create({
+            title: targetSessionTitle,
+          })
+          targetSessionID = created.id
+          targetSessionTitle = created.title
+        }
+
+        let lastUserMsgID: SessionV1.MessageID | undefined = undefined
+
+        for (const msg of body.messages || []) {
+          const msgID = MessageID.ascending()
+          const time = msg.time || Date.now()
+
+          if (msg.role === "user") {
+            lastUserMsgID = msgID
+            const userMsg: SessionV1.User = {
+              id: msgID,
+              sessionID: targetSessionID,
+              role: "user",
+              time: { created: time },
+              agent: "build",
+              model: {
+                modelID: (msg.model || "deepseek-chat") as any,
+                providerID: "deepseek" as any,
+              },
+            }
+            yield* sessionSvc.updateMessage(userMsg)
+
+            if (msg.text) {
+              const textPart: SessionV1.TextPart = {
+                id: PartID.ascending(),
+                messageID: msgID,
+                sessionID: targetSessionID,
+                type: "text",
+                text: msg.text,
+              }
+              yield* sessionSvc.updatePart(textPart)
+            }
+          } else {
+            const assistantMsg: SessionV1.Assistant = {
+              id: msgID,
+              sessionID: targetSessionID,
+              role: "assistant",
+              parentID: (lastUserMsgID || msgID) as any,
+              time: { created: time, completed: time },
+              agent: "build",
+              modelID: (msg.model || "deepseek-chat") as any,
+              providerID: "deepseek" as any,
+              mode: "build",
+              path: {
+                cwd: "",
+                root: "",
+              },
+              cost: 0,
+              tokens: {
+                total: 0,
+                input: 0,
+                output: 0,
+                reasoning: 0,
+                cache: { read: 0, write: 0 },
+              },
+              finish: "stop",
+            } as any
+            yield* sessionSvc.updateMessage(assistantMsg)
+
+            if (msg.reasoning) {
+              const reasoningPart: SessionV1.ReasoningPart = {
+                id: PartID.ascending(),
+                messageID: msgID,
+                sessionID: targetSessionID,
+                type: "reasoning",
+                text: msg.reasoning,
+                time: { start: time, end: time },
+              }
+              yield* sessionSvc.updatePart(reasoningPart)
+            }
+
+            if (msg.text) {
+              const textPart: SessionV1.TextPart = {
+                id: PartID.ascending(),
+                messageID: msgID,
+                sessionID: targetSessionID,
+                type: "text",
+                text: msg.text,
+              }
+              yield* sessionSvc.updatePart(textPart)
+            }
+          }
+        }
+
+        return HttpServerResponse.jsonUnsafe({
+          status: "ok",
+          session: {
+            id: targetSessionID,
+            title: targetSessionTitle,
+          },
+          messageCount: body.messages?.length || 0,
+        })
+      }),
+    )
+  }),
+).pipe(Layer.provide(authOnlyRouterLayer))
 
 const uiRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
@@ -280,6 +410,7 @@ export function createRoutes(
     instanceRoutes,
     serverRoutes,
     docRoute,
+    sessionImportRoute,
     uiRoute,
   ).pipe(
     Layer.provide([
