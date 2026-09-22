@@ -24,17 +24,17 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   return (
-    <Show when={session()}>
-      <box
-        backgroundColor={theme.backgroundPanel}
-        width={42}
-        height="100%"
-        paddingTop={1}
-        paddingBottom={1}
-        paddingLeft={2}
-        paddingRight={2}
-        position={props.overlay ? "absolute" : "relative"}
-      >
+    <box
+      backgroundColor={theme.backgroundPanel}
+      width={42}
+      height="100%"
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      paddingRight={2}
+      position={props.overlay ? "absolute" : "relative"}
+    >
+      <Show when={session()}>
         <scrollbox
           flexGrow={1}
           scrollAcceleration={scrollAcceleration()}
@@ -97,7 +97,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             </text>
           </pluginRuntime.Slot>
         </box>
-      </box>
-    </Show>
+      </Show>
+    </box>
   )
 }

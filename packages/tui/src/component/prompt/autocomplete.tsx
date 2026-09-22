@@ -462,6 +462,22 @@ export function Autocomplete(props: {
           },
         }
       }
+      const isInject = entry.display.trim() === "/inject" || (entry as { value?: string }).value === "/inject"
+      if (isInject) {
+        return {
+          ...entry,
+          display: "/inject [url]",
+          value: "/inject",
+          description: entry.description ?? "Injeta prompt puro a partir de URL ou padrão",
+          onSelect: () => {
+            const newText = "/inject "
+            const cursor = props.input().logicalCursor
+            props.input().deleteRange(0, 0, cursor.row, cursor.col)
+            props.input().insertText(newText)
+            props.input().cursorOffset = Bun.stringWidth(newText)
+          },
+        }
+      }
       return entry
     })
 

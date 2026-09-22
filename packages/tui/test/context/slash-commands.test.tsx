@@ -63,6 +63,16 @@ test("slash commands include reasoning, searching, thinking, and session", async
           sessionLinked = "linked"
         },
       },
+      {
+        name: "session.inject",
+        title: "Inject raw prompt from URL",
+        category: "Session",
+        namespace: "palette" as const,
+        slashName: "inject",
+        run: () => {
+          sessionLinked = "injected"
+        },
+      },
     ]
 
     keymap.registerLayer({ commands })
@@ -107,6 +117,9 @@ test("slash commands include reasoning, searching, thinking, and session", async
     const sessionSlash = slashesList.find((s) => s.display === "/session")
     expect(sessionSlash).toBeDefined()
     expect(sessionSlash?.aliases).toContain("/link-session")
+
+    const injectSlash = slashesList.find((s) => s.display === "/inject")
+    expect(injectSlash).toBeDefined()
 
     keymapRef.dispatchCommand("session.toggle.reasoning")
     expect(reasoningEnabled).toBe(true)

@@ -58,6 +58,7 @@ import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
 import { linkBridgeSession, importAndLinkDeepSeekSession } from "../../util/session-link"
+import { DEFAULT_INJECT_URL, fetchRawPrompt } from "../../util/session-inject"
 
 registerOpencodeSpinner()
 
@@ -1103,6 +1104,78 @@ export function Prompt(props: PromptProps) {
         }
 
         void keymap.dispatchCommand("session.link")
+        return true
+      }
+
+      if (slash === "inject") {
+        const restOfInput = inputText.trim().slice(firstWord.length).trim()
+        const targetUrl = restOfInput || DEFAULT_INJECT_URL
+        history.append({
+          ...store.prompt,
+          mode: currentMode,
+        })
+        input.clear()
+        input.extmarks.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+        if (finishMoveProgress) move.finishSubmit()
+        props.onSubmit?.()
+
+        toast.show({
+          title: "Injetando prompt...",
+          message: `Baixando prompt de: ${targetUrl}`,
+          variant: "info",
+          duration: 3000,
+        })
+
+        if (!props.sessionID) {
+          route.navigate({
+            type: "session",
+            sessionID,
+          })
+        }
+
+        void (async () => {
+          try {
+            const rawPrompt = await fetchRawPrompt(targetUrl)
+            move.startSubmit()
+            await sdk.client.session.prompt(
+              {
+                sessionID,
+                ...selectedModel,
+                agent: agent.name,
+                model: selectedModel,
+                variant,
+                thinkingEnabled: props.thinkingEnabled ? props.thinkingEnabled() : local.reasoning.enabled,
+                searchEnabled: props.searchEnabled ? props.searchEnabled() : local.search.enabled,
+                parts: [
+                  ...editorParts,
+                  {
+                    type: "text",
+                    text: rawPrompt,
+                  },
+                  ...nonTextParts,
+                ],
+              },
+              { throwOnError: true },
+            )
+
+            toast.show({
+              title: "Prompt injetado com sucesso!",
+              message: "Prompt enviado para o modelo.",
+              variant: "success",
+              duration: 4000,
+            })
+          } catch (err) {
+            toast.show({
+              title: "Falha na injeção do prompt",
+              message: err instanceof Error ? err.message : String(err),
+              variant: "error",
+              duration: 6000,
+            })
+          }
+        })()
+
         return true
       }
 

@@ -60,6 +60,7 @@ import { DialogAlert } from "./ui/dialog-alert"
 import { DialogConfirm } from "./ui/dialog-confirm"
 import { DialogPrompt } from "./ui/dialog-prompt"
 import { linkBridgeSession, importAndLinkDeepSeekSession } from "./util/session-link"
+import { DEFAULT_INJECT_URL, fetchRawPrompt } from "./util/session-inject"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
 import { KVProvider, useKV } from "./context/kv"
@@ -617,6 +618,72 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           } catch (err: any) {
             toast.show({
               title: "Erro ao importar sessão",
+              message: err?.message || String(err),
+              variant: "error",
+              duration: 6000,
+            })
+          }
+        },
+      },
+      {
+        name: "session.inject",
+        title: "Inject raw prompt from URL",
+        category: "Session",
+        slashName: "inject",
+        run: async () => {
+          const inputUrl = await DialogPrompt.show(dialog, "Injetar Prompt via URL", {
+            placeholder: DEFAULT_INJECT_URL,
+            value: DEFAULT_INJECT_URL,
+          })
+          if (!inputUrl) return
+
+          let targetSessionID = route.data.type === "session" ? route.data.sessionID : undefined
+          if (!targetSessionID) {
+            const createRes = await sdk.client.session.create({
+              directory: sdk.directory,
+            })
+            if (createRes.data?.id) {
+              targetSessionID = createRes.data.id
+              route.navigate({ type: "session", sessionID: targetSessionID })
+            }
+          }
+          if (!targetSessionID) return
+
+          toast.show({
+            title: "Injetando prompt...",
+            message: `Baixando prompt de: ${inputUrl}`,
+            variant: "info",
+            duration: 3000,
+          })
+
+          try {
+            const rawPrompt = await fetchRawPrompt(inputUrl)
+            const currentModel = local.model.current()
+            await sdk.client.session.prompt(
+              {
+                sessionID: targetSessionID,
+                agent: "default",
+                model: currentModel ? { providerID: currentModel.providerID, modelID: currentModel.modelID } : undefined,
+                thinkingEnabled: local.reasoning.enabled,
+                searchEnabled: local.search.enabled,
+                parts: [
+                  {
+                    type: "text",
+                    text: rawPrompt,
+                  },
+                ],
+              },
+              { throwOnError: true },
+            )
+            toast.show({
+              title: "Prompt injetado com sucesso!",
+              message: "Prompt enviado para o modelo.",
+              variant: "success",
+              duration: 4000,
+            })
+          } catch (err: any) {
+            toast.show({
+              title: "Falha na injeção do prompt",
               message: err?.message || String(err),
               variant: "error",
               duration: 6000,
