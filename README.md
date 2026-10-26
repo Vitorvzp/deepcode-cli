@@ -1,3 +1,55 @@
+# DeepCode CLI
+
+> 🟦 `deepcode-cli` · fork independente do OpenCode
+
+Este repositório mantém uma versão personalizada do [OpenCode](https://github.com/anomalyco/opencode), agente de programação com IA de código aberto. O projeto original e seus colaboradores são responsáveis pela base do código. Este fork é mantido em `Vitorvzp/deepcode-cli` e não é um produto oficial nem afiliado à equipe OpenCode.
+
+A [licença MIT original](LICENSE), com o aviso de copyright do OpenCode, permanece aplicável. Os nomes de pacotes, variáveis `OPENCODE_*` e partes da documentação ainda usam a identidade upstream.
+
+## Personalizações presentes neste checkout
+
+Estas funções foram identificadas no código da TUI; a lista descreve este checkout, sem afirmar exclusividade em relação às versões atuais do upstream:
+
+| Recurso | Fonte |
+| --- | --- |
+| Identidade `deepcode` no CLI e alias de executável | [`packages/opencode/package.json`](packages/opencode/package.json), [`src/index.ts`](packages/opencode/src/index.ts) |
+| Importação e vínculo de conversa DeepSeek com um bridge | [`session-link.ts`](packages/tui/src/util/session-link.ts), comando `/session` em [`app.tsx`](packages/tui/src/app.tsx) |
+| Carregamento de texto de uma URL e envio como prompt à sessão | [`session-inject.ts`](packages/tui/src/util/session-inject.ts), comando `/inject` em [`app.tsx`](packages/tui/src/app.tsx) |
+| Apresentação de retomada de sessão com o nome DeepCode | [`presentation.ts`](packages/tui/src/util/presentation.ts) |
+
+A integração de sessões depende de um bridge separado; o helper usa `http://127.0.0.1:5050` como padrão. Nenhum bridge ou conta externa é configurado automaticamente por estas instruções. O comando `/inject` baixa conteúdo externo e o envia ao modelo selecionado; revise a URL e o texto antes de usá-lo. A compatibilidade e a disponibilidade dessas integrações não foram validadas em serviços reais nesta revisão documental.
+
+## Trabalhar neste fork
+
+Use o código deste repositório para desenvolver as personalizações. O gerenciador declarado em `package.json` é `bun@1.3.14` e a branch padrão é `dev`.
+
+```sh
+git clone https://github.com/Vitorvzp/deepcode-cli.git
+cd deepcode-cli
+bun install --frozen-lockfile
+bun run dev
+```
+
+O script `dev` inicia o CLI em `packages/opencode`. Outros scripts de interface incluem `dev:web` e `dev:desktop`; consulte [`package.json`](package.json) e os respectivos pacotes para requisitos específicos.
+
+O script de compilação está em [`script/build.ts`](packages/opencode/script/build.ts) e aceita `--single` para a plataforma atual. Ele ainda usa nomes `opencode` nos caminhos de saída e possui uma etapa condicional de publicação de releases. Revise o script e a configuração de release antes de empacotar uma distribuição.
+
+Os testes devem ser executados dentro do pacote correspondente, conforme [`AGENTS.md`](AGENTS.md). Exemplos de verificações disponíveis, após instalar as dependências:
+
+```sh
+cd packages/tui
+bun test test/session-inject.test.ts
+bun typecheck
+```
+
+Não execute o script de testes da raiz: ele contém uma guarda que encerra com erro.
+
+## Documentação herdada do OpenCode
+
+O conteúdo abaixo foi preservado do upstream como referência. Os instaladores, pacotes publicados, releases, badges e canais de comunidade abaixo pertencem ao **OpenCode original**; não demonstram a compilação nem instalam as personalizações deste fork. A [tradução brasileira herdada](README.br.md) também descreve o upstream. Para desenvolvimento do DeepCode, use as instruções acima.
+
+---
+
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
